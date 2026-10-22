@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>💖 Our Love Nook 💖</title>
+    <!-- PeerJS for free real-time P2P networking -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        * { box-sizing: border-box; font-family: 'Segoe UI', sans-serif; }
+        body { background: #fff5f5; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        .card { background: white; padding: 30px; border-radius: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); text-align: center; width: 100%; max-width: 400px; }
+        h1 { color: #ff4757; margin-bottom: 8px; font-size: 24px; }
+        p { color: #666; font-size: 14px; margin-bottom: 20px; }
+        input { width: 100%; padding: 12px; border: 2px solid #ffeaa7; border-radius: 12px; margin-bottom: 12px; text-align: center; font-size: 16px; font-weight: bold; }
+        button { width: 100%; padding: 12px; background: #ff4757; color: white; border: none; border-radius: 12px; font-weight: bold; font-size: 16px; cursor: pointer; margin-bottom: 8px; transition: background 0.2s; }
+        button:hover { background: #ff6b81; }
+        .secondary-btn { background: #74b9ff; }
+        .secondary-btn:hover { background: #0984e3; }
+        .hidden { display: none; }
+        .tttGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 20px 0; }
+        .tttCell { aspect-ratio: 1; background: #fff0f2; border-radius: 16px; display: flex; justify-content: center; align-items: center; font-size: 36px; cursor: pointer; user-select: none; }
+        .status { background: #ffeaa7; padding: 8px 12px; border-radius: 8px; font-weight: bold; color: #d63031; margin-bottom: 12px; font-size: 14px; }
+    </style>
+</head>
+<body>
+
+    <!-- LOBBY SCREEN -->
+    <div class="card" id="lobbyScreen">
+        <h1>💖 Our Love Nook 💖</h1>
+        <p>Play Tic Tac Toe live from anywhere!</p>
+        <button onclick="createRoom()">Host Game (Get Code)</button>
+        <div style="margin: 15px 0; color: #ccc;">— OR —</div>
+        <input type="text" id="joinCodeInput" placeholder="Enter Host ID" />
+        <button class="secondary-btn" onclick="joinRoom()">Join Partner</button>
+        <p id="lobbyStatus" style="color: #ff4757; margin-top: 10px;"></p>
+    </div>
+
+    <!-- GAME SCREEN -->
+    <div class="card hidden" id="gameScreen">
+        <h1>Tic Tac Toe 💕</h1>
+        <div class="status" id="turnStatus">Connecting...</div>
+        <div class="tttGrid" id="boardGrid">
+            <div class="tttCell" onclick="makeMove(0)"></div>
+            <div class="tttCell" onclick="makeMove(1)"></div>
+            <div class="tttCell" onclick="makeMove(2)"></div>
+            <div class="tttCell" onclick="makeMove(3)"></div>
+            <div class="tttCell" onclick="makeMove(4)"></div>
+            <div class="tttCell" onclick="makeMove(5)"></div>
+            <div class="tttCell" onclick="makeMove(6)"></div>
+            <div class="tttCell" onclick="makeMove(7)"></div>
+            <div class="tttCell" onclick="makeMove(8)"></div>
+        </div>
+        <button onclick="resetGame()">Play Again</button>
+    </div>
+
+    <script>
+        let peer = null;
+        let conn = null;
+        let isHost = false;
+        let mySymbol = '💖';
+        let currentTurn = '💖';
+        let board = Array(9).fill(null);
+
+        function showStatus(text) {
+            document.getElementById('lobbyStatus').innerText = text;
+        }
+
+        // Host creates a room
+        function createRoom() {
+            showStatus("Generating room code...");
+            peer = new Peer();
+            peer.on('open', (id) => {
+                isHost = true;
+                mySymbol = '💖';
+                showStatus(`Your Code: ${id}\nSend this code to your crush!`);
+                alert(`Your Room Code is:\n\n${id}\n\nCopy and share it!`);
+            });
+
+            peer.on('connection', (connection) => {
+                conn = connection;
+                setupConnection();
+            });
+        }
+
+        // Guest joins host's room
+        function joinRoom() {
+            const hostId = document.getElementById('joinCodeInput').value.trim();
+            if (!hostId) return alert("Please enter your partner's code!");
+            showStatus("Connecting to partner...");
+            
+            peer = new Peer();
+            peer.on('open', () => {
+                isHost = false;
+                mySymbol = '⭐';
+                conn = peer.connect(hostId);
+                setupConnection();
+            });
+        }
+
+        function setupConnection() {
+            conn.on('open', () => {
+                document.getElementById('lobbyScreen').classList.add('hidden');
+                document.getElementById('gameScreen').classList.remove('hidden');
+                updateTurnUI();
+            });
+
+            conn.on('data', (data) => {
+                if (data.type === 'move') {
+                    board[data.index] = data.symbol;
+                    currentTurn = data.nextTurn;
+                    renderBoard();
+                    checkWin();
+                } else if (data.type === 'reset') {
+                    board = Array(9).fill(null);
+                    currentTurn = '💖';
+                    renderBoard();
+                    updateTurnUI();
+                }
+            });
+        }
+
+        function makeMove(index) {
+            if (!conn || board[index] !== null || currentTurn !== mySymbol) return;
+
+            board[index] = mySymbol;
+            currentTurn = mySymbol === '💖' ? '⭐' : '💖';
+            renderBoard();
+
+            conn.send({
+                type: 'move',
+                index: index,
+                symbol: mySymbol,
+                nextTurn: currentTurn
+            });
+
+            checkWin();
+        }
+
+        function renderBoard() {
+            const cells = document.getElementsByClassName('tttCell');
+            for (let i = 0; i < 9; i++) {
+                cells[i].innerText = board[i] || '';
+            }
+            updateTurnUI();
+        }
+
+        function updateTurnUI() {
+            const statusDiv = document.getElementById('turnStatus');
+            if (currentTurn === mySymbol) {
+                statusDiv.innerText = `Your Turn! (${mySymbol})`;
+                statusDiv.style.background = '#ffeaa7';
+            } else {
+                statusDiv.innerText = `Waiting for partner... (${currentTurn})`;
+                statusDiv.style.background = '#f1f2f6';
+            }
+        }
+
+        function checkWin() {
+            const winCombos = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+            for (let combo of winCombos) {
+                const [a, b, c] = combo;
+                if (board[a] && board[a] === board[b] && board[a] === board[c]) {
+                    alert(`${board[a]} Wins the game! 🎉`);
+                    return;
+                }
+            }
+            if (board.every(cell => cell !== null)) {
+                alert("It's a Tie! 💕");
+            }
+        }
+
+        function resetGame() {
+            board = Array(9).fill(null);
+            currentTurn = '💖';
+            renderBoard();
+            if (conn) conn.send({ type: 'reset' });
+        }
+    </script>
+</body>
+</html>
